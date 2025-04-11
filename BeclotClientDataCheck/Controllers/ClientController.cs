@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 [ApiController]
 [Route("api/[controller]")]
@@ -93,6 +94,27 @@ public class ClientController : ControllerBase
         public bool AllowCheck { get; set; }
     }
 
+    public class MetafieldPayload
+    {
+        [JsonPropertyName("namespace")]
+        public string Namespace { get; set; }
+
+        [JsonPropertyName("key")]
+        public string Key { get; set; }
+
+        [JsonPropertyName("value")]
+        public string Value { get; set; }
+
+        [JsonPropertyName("permission_set")]
+        public string PermissionSet { get; set; }
+
+        [JsonPropertyName("description")]
+        public string Description { get; set; }
+
+        [JsonPropertyName("value_type")]
+        public string ValueType { get; set; }
+    }
+
     [HttpPost("setMetafield")]
     public async Task<IActionResult> SetMetafield([FromBody] SetMetafieldRequest request)
     {
@@ -119,14 +141,14 @@ public class ClientController : ControllerBase
                     m.GetProperty("namespace").GetString() == "payment_options" &&
                     m.GetProperty("key").GetString() == "allow_check_payment");
 
-            var payload = new
+            var payload = new MetafieldPayload
             {
-                namespace_ = "payment_options",
-                key = "allow_check_payment",
-                value = request.AllowCheck.ToString().ToLower(),
-                permission_set = "read",
-                description = "Enable or disable check payment option",
-                value_type = "boolean"
+                Namespace = "payment_options",
+                Key = "allow_check_payment",
+                Value = request.AllowCheck.ToString().ToLower(),
+                PermissionSet = "read",
+                Description = "Enable or disable check payment option",
+                ValueType = "boolean"
             };
 
             HttpResponseMessage response;
