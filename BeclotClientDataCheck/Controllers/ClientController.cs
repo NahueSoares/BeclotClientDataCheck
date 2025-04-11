@@ -106,7 +106,6 @@ public class ClientController : ControllerBase
             client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
             client.DefaultRequestHeaders.Add("X-Auth-Token", token);
             client.DefaultRequestHeaders.Add("Accept", "application/json");
-            client.DefaultRequestHeaders.Add("Content-Type", "application/json");
 
             // Verificar si el metacampo ya existe
             var getResponse = await client.GetAsync($"customers/{request.Id}/metafields");
