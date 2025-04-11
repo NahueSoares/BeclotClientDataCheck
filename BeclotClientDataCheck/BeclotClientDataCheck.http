@@ -1,0 +1,6 @@
+@BeclotClientDataCheck_HostAddress = http://localhost:5171
+
+GET {{BeclotClientDataCheck_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
