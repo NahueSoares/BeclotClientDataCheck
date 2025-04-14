@@ -243,18 +243,32 @@ public class ClientController : ControllerBase
 
     // Middleware de verificación de administrador
     [HttpGet("check-access")]
-    public async Task<IActionResult> CheckAccess()
+    public IActionResult CheckAccess()
     {
-        _logger.LogInformation("Verificando acceso al endpoint check-access.");
+        var isAdminCookie = Request.Cookies["is_admin"];
+        var isAdmin = isAdminCookie == "true";
 
-        bool isAdmin = await IsUserAdmin();
+        _logger.LogInformation("Cookie is_admin: {IsAdmin}", isAdminCookie);
 
         if (!isAdmin)
         {
-            return Redirect("https://cosmetica-v4.mybigcommerce.com");
+            return Unauthorized(new { isAdmin = false });
         }
 
-        return Ok(new { message = "Acceso permitido" });
+        return Ok(new { isAdmin = true });
+    }
+
+    [HttpPost("set-admin-cookie")]
+    public IActionResult SetAdminCookie()
+    {
+        Response.Cookies.Append("is_admin", "true", new CookieOptions
+        {
+            HttpOnly = false, // la necesitamos visible desde JS si querés usarla en frontend también
+            Secure = true,
+            SameSite = SameSiteMode.None
+        });
+
+        return Ok(new { success = true });
     }
 
 }
