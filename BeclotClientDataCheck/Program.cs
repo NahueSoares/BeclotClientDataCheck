@@ -14,6 +14,9 @@ builder.Services.AddCors(options =>
         b => b.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader());
 });
 
+//Log
+builder.Services.AddLogging();
+
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.

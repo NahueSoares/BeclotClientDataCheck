@@ -1,5 +1,4 @@
-﻿// Controllers/ClientController.cs
-using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Mvc;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
@@ -11,11 +10,13 @@ public class ClientController : ControllerBase
 {
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly IConfiguration _config;
+    private readonly ILogger<ClientController> _logger;
 
-    public ClientController(IHttpClientFactory httpClientFactory, IConfiguration config)
+    public ClientController(IHttpClientFactory httpClientFactory, IConfiguration config, ILogger<ClientController> logger)
     {
         _httpClientFactory = httpClientFactory;
         _config = config;
+        _logger = logger;
     }
 
     [HttpGet("list")]
@@ -195,4 +196,65 @@ public class ClientController : ControllerBase
             });
         }
     }
+
+    private async Task<bool> IsUserAdmin()
+    {
+        var token = Request.Headers["Authorization"].ToString().Replace("Bearer ", string.Empty);
+
+        _logger.LogInformation("Verificando si el usuario es admin con token: {Token}", token); // Log para el token
+
+        if (string.IsNullOrEmpty(token))
+        {
+            _logger.LogWarning("Token vacío o no proporcionado.");
+            return false;
+        }
+            
+
+        var client = _httpClientFactory.CreateClient();
+        var storeHash = _config["BigCommerce:StoreHash"];
+        string url = $"https://api.bigcommerce.com/stores/{storeHash}/v3/users";
+
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        _logger.LogInformation("Realizando la solicitud a la API de BigCommerce para verificar roles.");
+
+        var response = await client.GetAsync(url);
+
+        if (response.IsSuccessStatusCode)
+        {
+            var content = await response.Content.ReadAsStringAsync();
+            _logger.LogInformation("Respuesta recibida de la API: {Response}", content);
+
+            var users = JsonDocument.Parse(content);
+
+            // Verificar si el usuario tiene rol de administrador
+            foreach (var user in users.RootElement.GetProperty("data").EnumerateArray())
+            {
+                if (user.GetProperty("role").GetString() == "admin")
+                {
+                    _logger.LogInformation("Usuario es administrador.");
+                    return true;
+                }
+            }
+        }
+        _logger.LogError("Error al consultar los usuarios. Código de respuesta: {StatusCode}", response.StatusCode);
+        return false;
+    }
+
+    // Middleware de verificación de administrador
+    [HttpGet("check-access")]
+    public async Task<IActionResult> CheckAccess()
+    {
+        _logger.LogInformation("Verificando acceso al endpoint check-access.");
+
+        bool isAdmin = await IsUserAdmin();
+
+        if (!isAdmin)
+        {
+            return Redirect("https://cosmetica-v4.mybigcommerce.com");
+        }
+
+        return Ok(new { message = "Acceso permitido" });
+    }
+
 }
