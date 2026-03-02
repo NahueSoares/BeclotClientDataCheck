@@ -196,51 +196,7 @@ public class ClientController : ControllerBase
             });
         }
     }
-
-    private async Task<bool> IsUserAdmin()
-    {
-        var token = Request.Headers["Authorization"].ToString().Replace("Bearer ", string.Empty);
-
-        _logger.LogInformation("Verificando si el usuario es admin con token: {Token}", token); // Log para el token
-
-        if (string.IsNullOrEmpty(token))
-        {
-            _logger.LogWarning("Token vacío o no proporcionado.");
-            return false;
-        }
-            
-
-        var client = _httpClientFactory.CreateClient();
-        var storeHash = _config["BigCommerce:StoreHash"];
-        string url = $"https://api.bigcommerce.com/stores/{storeHash}/v3/users";
-
-        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
-
-        _logger.LogInformation("Realizando la solicitud a la API de BigCommerce para verificar roles.");
-
-        var response = await client.GetAsync(url);
-
-        if (response.IsSuccessStatusCode)
-        {
-            var content = await response.Content.ReadAsStringAsync();
-            _logger.LogInformation("Respuesta recibida de la API: {Response}", content);
-
-            var users = JsonDocument.Parse(content);
-
-            // Verificar si el usuario tiene rol de administrador
-            foreach (var user in users.RootElement.GetProperty("data").EnumerateArray())
-            {
-                if (user.GetProperty("role").GetString() == "admin")
-                {
-                    _logger.LogInformation("Usuario es administrador.");
-                    return true;
-                }
-            }
-        }
-        _logger.LogError("Error al consultar los usuarios. Código de respuesta: {StatusCode}", response.StatusCode);
-        return false;
-    }
-
+      
     // Middleware de verificación de administrador
     [HttpGet("check-access")]
     public IActionResult CheckAccess()
@@ -266,6 +222,7 @@ public class ClientController : ControllerBase
             HttpOnly = false, // la necesitamos visible desde JS si querés usarla en frontend también
             Secure = true,
             SameSite = SameSiteMode.None
+            
         });
 
         return Ok(new { success = true });

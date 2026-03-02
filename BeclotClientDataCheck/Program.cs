@@ -1,7 +1,9 @@
+using BeclotClientDataCheck.Controllers;
+
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
-
+builder.Services.Configure<AndreaniOptions>(builder.Configuration.GetSection("Andreani"));
 builder.Services.AddControllers();
 builder.Services.AddHttpClient();
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
