@@ -14,7 +14,9 @@ builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowBigCommerce", policy =>
     {
-        policy.WithOrigins("https://cosmetica-v4.mybigcommerce.com")
+        policy.WithOrigins("https://cosmetica-v4.mybigcommerce.com",
+                "https://talawork.com"
+                )
               .AllowAnyHeader()
               .AllowAnyMethod()
               .AllowCredentials();
