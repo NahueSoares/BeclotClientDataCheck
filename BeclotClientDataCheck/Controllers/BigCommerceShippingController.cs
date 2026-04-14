@@ -81,6 +81,67 @@ namespace BeclotClientDataCheck.Controllers
             }
         }
 
+        [HttpPost("provider-quote")]
+        public async Task<IActionResult> ProviderQuote([FromBody] BigCommerceShippingRequest request)
+        {
+            if (request == null)
+                return BadRequest(new { error = "Body requerido." });
+
+            if (request.Destination == null || string.IsNullOrWhiteSpace(request.Destination.PostalCode))
+                return BadRequest(new { error = "Destination.PostalCode es requerido." });
+
+            if (request.Items == null || request.Items.Count == 0)
+                return BadRequest(new { error = "Items es requerido." });
+
+            try
+            {
+                var storeConfig = GetStoreConfig(request.Store);
+
+                var items = request.Items.Select(x => new AndreaniEstimateItem
+                {
+                    ProductId = x.ProductId,
+                    Quantity = x.Quantity
+                }).ToList();
+
+                var totalKilos = await CalculateTotalWeightAsync(items, storeConfig);
+                var andreaniResult = await GetAndreaniQuoteAsync(
+                    request.Destination.PostalCode,
+                    (double)totalKilos,
+                    items.Count
+                );
+
+                var resultJson = JsonSerializer.Serialize(andreaniResult);
+                using var doc = JsonDocument.Parse(resultJson);
+
+                var totalConIva = doc.RootElement.GetProperty("totalConIva").GetDecimal();
+                var currency = doc.RootElement.GetProperty("currency").GetString() ?? "ARS";
+
+                return Ok(new
+                {
+                    quotes = new[]
+                    {
+                new
+                {
+                    code = "andreani-standard",
+                    displayName = "Andreani",
+                    cost = totalConIva,
+                    currency = currency
+                }
+            }
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error generando provider quote.");
+
+                return StatusCode(500, new
+                {
+                    error = "No se pudo generar la cotización del provider.",
+                    detail = ex.Message
+                });
+            }
+        }
+
         private BigCommerceStore GetStoreConfig(string? store)
         {
             var storeKey = string.IsNullOrWhiteSpace(store) ? "Beclot" : store;
