@@ -4,6 +4,7 @@ var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 builder.Services.Configure<AndreaniOptions>(builder.Configuration.GetSection("Andreani"));
+builder.Services.Configure<BigCommerceOptions>(builder.Configuration.GetSection("BigCommerce"));
 builder.Services.AddControllers();
 builder.Services.AddHttpClient();
 

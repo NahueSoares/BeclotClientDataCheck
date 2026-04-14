@@ -1,4 +1,6 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using BeclotClientDataCheck.Models;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
@@ -9,22 +11,39 @@ using System.Text.Json.Serialization;
 public class ClientController : ControllerBase
 {
     private readonly IHttpClientFactory _httpClientFactory;
-    private readonly IConfiguration _config;
+    private readonly BigCommerceOptions _bcOptions;
     private readonly ILogger<ClientController> _logger;
 
-    public ClientController(IHttpClientFactory httpClientFactory, IConfiguration config, ILogger<ClientController> logger)
+    public ClientController(
+        IHttpClientFactory httpClientFactory,
+        IOptions<BigCommerceOptions> bcOptions,
+        ILogger<ClientController> logger)
     {
         _httpClientFactory = httpClientFactory;
-        _config = config;
+        _bcOptions = bcOptions.Value;
         _logger = logger;
     }
 
+    private BigCommerceStore GetStoreConfig(string? store)
+    {
+        var storeKey = string.IsNullOrWhiteSpace(store) ? "Beclot" : store;
+
+        if (!_bcOptions.Stores.TryGetValue(storeKey, out var config))
+        {
+            throw new Exception($"La tienda '{storeKey}' no está configurada en appsettings.");
+        }
+
+        return config;
+    }
+
     [HttpGet("list")]
-    public async Task<IActionResult> GetCustomerList()
+    public async Task<IActionResult> GetCustomerList([FromQuery] string? store = null)
     {
         var client = _httpClientFactory.CreateClient();
-        var token = _config["BigCommerce:Token"];
-        var storeHash = _config["BigCommerce:StoreHash"];
+        var storeConfig = GetStoreConfig(store);
+
+        var token = storeConfig.Token;
+        var storeHash = storeConfig.StoreHash;
 
         client.BaseAddress = new Uri($"https://api.bigcommerce.com/stores/{storeHash}/v3/");
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
@@ -52,11 +71,13 @@ public class ClientController : ControllerBase
     }
 
     [HttpGet("metafield")]
-    public async Task<IActionResult> CheckAllowCheckPayment(int id)
+    public async Task<IActionResult> CheckAllowCheckPayment(int id, [FromQuery] string? store = null)
     {
         var client = _httpClientFactory.CreateClient();
-        var token = _config["BigCommerce:Token"];
-        var storeHash = _config["BigCommerce:StoreHash"];
+        var storeConfig = GetStoreConfig(store);
+
+        var token = storeConfig.Token;
+        var storeHash = storeConfig.StoreHash;
 
         var url = $"https://api.bigcommerce.com/stores/{storeHash}/v3/customers/{id}/metafields";
 
@@ -91,6 +112,7 @@ public class ClientController : ControllerBase
 
     public class SetMetafieldRequest
     {
+        public string? Store { get; set; }
         public int Id { get; set; }
         public bool AllowCheck { get; set; }
     }
@@ -122,8 +144,9 @@ public class ClientController : ControllerBase
         try
         {
             var client = _httpClientFactory.CreateClient();
-            var token = _config["BigCommerce:Token"];
-            var storeHash = _config["BigCommerce:StoreHash"];
+            var storeConfig = GetStoreConfig(request.Store);
+            var token = storeConfig.Token;
+            var storeHash = storeConfig.StoreHash;
 
             client.BaseAddress = new Uri($"https://api.bigcommerce.com/stores/{storeHash}/v3/");
             client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);

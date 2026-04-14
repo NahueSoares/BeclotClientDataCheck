@@ -14,15 +14,71 @@ namespace BeclotClientDataCheck.Controllers
         private readonly IHttpClientFactory _httpClientFactory;
         private readonly AndreaniOptions _opt;
         private readonly ILogger<AndreaniShippingController> _logger;
+        private readonly BigCommerceOptions _bcOptions;
 
         public AndreaniShippingController(
             IHttpClientFactory httpClientFactory,
             IOptions<AndreaniOptions> opt,
+            IOptions<BigCommerceOptions> bcOptions,
             ILogger<AndreaniShippingController> logger)
         {
             _httpClientFactory = httpClientFactory;
             _opt = opt.Value;
+            _bcOptions = bcOptions.Value;
             _logger = logger;
+        }
+
+        private BigCommerceStore GetStoreConfig(string? store)
+        {
+            var storeKey = string.IsNullOrWhiteSpace(store) ? "Beclot" : store;
+
+            if (!_bcOptions.Stores.TryGetValue(storeKey, out var config))
+            {
+                throw new Exception($"La tienda '{storeKey}' no está configurada en appsettings.");
+            }
+
+            return config;
+        }
+
+        [HttpPost("estimate-by-items")]
+        public async Task<IActionResult> EstimateByItems([FromBody] AndreaniEstimateRequest request)
+        {
+            if (request == null)
+                return BadRequest(new { error = "Body requerido." });
+
+            if (string.IsNullOrWhiteSpace(request.Cp))
+                return BadRequest(new { error = "cp es requerido." });
+
+            if (request.Items == null || request.Items.Count == 0)
+                return BadRequest(new { error = "items es requerido." });
+
+            try
+            {
+                var storeConfig = GetStoreConfig(request.Store);
+                var kilosTotales = await CalculateTotalWeightAsync(request.Items, storeConfig);
+
+                var result = await GetAndreaniQuoteAsync(request.Cp, (double)kilosTotales, request.Items.Count);
+
+                return Ok(new
+                {
+                    source = "calculated_from_products",
+                    store = string.IsNullOrWhiteSpace(request.Store) ? "Beclot" : request.Store,
+                    totalKilos = kilosTotales,
+                    cp = request.Cp,
+                    items = request.Items,
+                    andreani = result
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error calculando envío Andreani por items.");
+
+                return StatusCode(500, new
+                {
+                    error = "No se pudo calcular el envío.",
+                    detail = ex.Message
+                });
+            }
         }
 
         [HttpGet("estimate")]
@@ -128,6 +184,61 @@ namespace BeclotClientDataCheck.Controllers
                 currency = "ARS",
                 raw = tarifa
             };
+        }
+
+        private async Task<decimal> CalculateTotalWeightAsync(List<AndreaniEstimateItem> items, BigCommerceStore storeConfig)
+        {
+            var productIds = items
+                .Where(x => x.ProductId > 0 && x.Quantity > 0)
+                .Select(x => x.ProductId)
+                .Distinct()
+                .ToList();
+
+            if (productIds.Count == 0)
+                throw new Exception("No hay productIds válidos.");
+
+            var client = _httpClientFactory.CreateClient();
+
+            var idsParam = string.Join(",", productIds);
+            var url = $"https://api.bigcommerce.com/stores/{storeConfig.StoreHash}/v3/catalog/products?id:in={idsParam}";
+
+            var request = new HttpRequestMessage(HttpMethod.Get, url);
+            request.Headers.Add("X-Auth-Token", storeConfig.Token);
+            request.Headers.Accept.Add(new System.Net.Http.Headers.MediaTypeWithQualityHeaderValue("application/json"));
+
+            var response = await client.SendAsync(request);
+            var body = await response.Content.ReadAsStringAsync();
+
+            if (!response.IsSuccessStatusCode)
+            {
+                throw new Exception($"BigCommerce products devolvió {(int)response.StatusCode}: {body}");
+            }
+
+            var options = new JsonSerializerOptions
+            {
+                PropertyNameCaseInsensitive = true
+            };
+
+            var parsed = JsonSerializer.Deserialize<BigCommerceProductsResponse>(body, options);
+
+            if (parsed?.Data == null || parsed.Data.Count == 0)
+                throw new Exception("No se encontraron productos en BigCommerce.");
+
+            var weightsByProductId = parsed.Data.ToDictionary(p => p.Id, p => p.Weight);
+
+            decimal totalWeight = 0;
+
+            foreach (var item in items)
+            {
+                if (!weightsByProductId.TryGetValue(item.ProductId, out var weight))
+                {
+                    throw new Exception($"No se encontró peso para el producto {item.ProductId}.");
+                }
+
+                totalWeight += weight * item.Quantity;
+            }
+
+            return totalWeight;
         }
 
         private static decimal ParseDecimalOrZero(string? value)
